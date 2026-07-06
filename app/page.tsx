@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { JoinMapForm } from "@/components/join-map-form";
+import { SixSevenDialog } from "@/components/six-seven-dialog";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -21,9 +22,7 @@ export default async function Home() {
       />
 
       <header className="relative z-10 flex items-center justify-between px-8 py-6">
-        <span className="text-sm font-medium tracking-wide text-foreground">
-          67
-        </span>
+        <SixSevenDialog />
         <nav className="flex items-center gap-3">
           {user ? (
             <Button size="sm" render={<Link href="/dashboard" />}>
