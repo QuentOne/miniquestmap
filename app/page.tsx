@@ -22,7 +22,7 @@ export default async function Home() {
 
       <header className="relative z-10 flex items-center justify-between px-8 py-6">
         <span className="text-sm font-medium tracking-wide text-foreground">
-          Quest Map
+          67
         </span>
         <nav className="flex items-center gap-3">
           {user ? (
@@ -43,17 +43,9 @@ export default async function Home() {
       </header>
 
       <main className="relative z-10 flex flex-1 flex-col items-center justify-center px-6 text-center">
-        <p className="mb-4 text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
-          A living map for anything you&apos;re working toward
-        </p>
         <h1 className="max-w-2xl text-balance text-4xl font-medium leading-tight tracking-tight text-foreground sm:text-6xl">
-          Turn any goal into a quest tree
+          A map for your goals
         </h1>
-        <p className="mt-6 max-w-md text-balance text-base leading-relaxed text-muted-foreground">
-          Build a branching map of objectives, share it with a 4-letter code,
-          and let others fire-up nodes and suggest new quests. No login
-          required to explore.
-        </p>
 
         <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
           <Button
@@ -71,7 +63,7 @@ export default async function Home() {
       </main>
 
       <footer className="relative z-10 px-8 py-6 text-center text-xs text-muted-foreground">
-        Built with Next.js, Supabase &amp; React Flow.
+        Built by Big Quentin
       </footer>
     </div>
   );
