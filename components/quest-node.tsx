@@ -69,7 +69,7 @@ function QuestNodeComponent({ data }: NodeProps<QuestFlowNode>) {
           onFire();
         }}
         className={cn(
-          "absolute -bottom-1 -right-1 flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium backdrop-blur transition-colors",
+          "nodrag absolute -bottom-1 -right-1 flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium backdrop-blur transition-colors",
           isFiredByMe
             ? "border-orange-400/60 bg-orange-500/20 text-orange-200"
             : "border-white/15 bg-black/60 text-zinc-300 hover:border-white/30",

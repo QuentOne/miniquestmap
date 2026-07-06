@@ -44,6 +44,8 @@ export type Database = {
           is_complete: boolean
           map_id: string
           parent_id: string | null
+          pos_x: number | null
+          pos_y: number | null
           title: string
         }
         Insert: {
@@ -53,6 +55,8 @@ export type Database = {
           is_complete?: boolean
           map_id: string
           parent_id?: string | null
+          pos_x?: number | null
+          pos_y?: number | null
           title: string
         }
         Update: {
@@ -62,6 +66,8 @@ export type Database = {
           is_complete?: boolean
           map_id?: string
           parent_id?: string | null
+          pos_x?: number | null
+          pos_y?: number | null
           title?: string
         }
         Relationships: [

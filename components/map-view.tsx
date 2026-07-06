@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   BackgroundVariant,
   Controls,
+  type Connection,
   type Edge,
+  type Node as FlowNode,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { toast } from "sonner";
+import { Home } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getVisitorId } from "@/lib/visitor";
 import { layoutTree } from "@/lib/layout";
@@ -19,6 +23,39 @@ import { GlowEdgeComponent, type GlowEdge } from "@/components/glow-edge";
 import { NodePanel } from "@/components/node-panel";
 import { SuggestDialog } from "@/components/suggest-dialog";
 import type { FireCounts, MapRow, NodeRow, ReactionRow } from "@/lib/types";
+
+function isDescendant(nodesList: NodeRow[], ancestorId: string, candidateId: string): boolean {
+  const childrenByParent = new Map<string, string[]>();
+  for (const n of nodesList) {
+    if (n.parent_id) {
+      childrenByParent.set(n.parent_id, [...(childrenByParent.get(n.parent_id) ?? []), n.id]);
+    }
+  }
+  const stack = [...(childrenByParent.get(ancestorId) ?? [])];
+  while (stack.length) {
+    const current = stack.pop()!;
+    if (current === candidateId) return true;
+    stack.push(...(childrenByParent.get(current) ?? []));
+  }
+  return false;
+}
+
+function countDescendants(nodesList: NodeRow[], rootId: string): number {
+  const childrenByParent = new Map<string, string[]>();
+  for (const n of nodesList) {
+    if (n.parent_id) {
+      childrenByParent.set(n.parent_id, [...(childrenByParent.get(n.parent_id) ?? []), n.id]);
+    }
+  }
+  let count = 0;
+  const stack = [...(childrenByParent.get(rootId) ?? [])];
+  while (stack.length) {
+    const current = stack.pop()!;
+    count++;
+    stack.push(...(childrenByParent.get(current) ?? []));
+  }
+  return count;
+}
 
 const nodeTypes = { questNode: QuestNode };
 const edgeTypes = { glowEdge: GlowEdgeComponent };
@@ -184,12 +221,116 @@ export function MapView({
     [],
   );
 
+  const handleEditNode = useCallback((nodeId: string, title: string, description: string) => {
+    const previous = nodes.find((n) => n.id === nodeId);
+    setNodes((prev) => prev.map((n) => (n.id === nodeId ? { ...n, title, description } : n)));
+    const supabase = createClient();
+    supabase
+      .from("nodes")
+      .update({ title, description })
+      .eq("id", nodeId)
+      .then(({ error }) => {
+        if (error) {
+          toast.error("Could not save changes");
+          if (previous) setNodes((prev) => prev.map((n) => (n.id === nodeId ? previous : n)));
+          return;
+        }
+        toast.success("Quest updated");
+      });
+  }, [nodes]);
+
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      const supabase = createClient();
+      supabase
+        .from("nodes")
+        .delete()
+        .eq("id", nodeId)
+        .then(({ error }) => {
+          if (error) {
+            toast.error("Could not delete quest");
+            return;
+          }
+          setNodes((prev) => {
+            const toRemove = new Set([nodeId]);
+            let changed = true;
+            while (changed) {
+              changed = false;
+              for (const n of prev) {
+                if (n.parent_id && toRemove.has(n.parent_id) && !toRemove.has(n.id)) {
+                  toRemove.add(n.id);
+                  changed = true;
+                }
+              }
+            }
+            return prev.filter((n) => !toRemove.has(n.id));
+          });
+          setSelectedId((current) => (current === nodeId ? null : current));
+          toast.success("Quest deleted");
+        });
+    },
+    [],
+  );
+
+  const handleNodeDragStop = useCallback(
+    (_event: unknown, node: FlowNode) => {
+      if (!isOwner) return;
+      const { x, y } = node.position;
+      setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, pos_x: x, pos_y: y } : n)));
+      const supabase = createClient();
+      supabase
+        .from("nodes")
+        .update({ pos_x: x, pos_y: y })
+        .eq("id", node.id)
+        .then(({ error }) => {
+          if (error) toast.error("Could not save quest position");
+        });
+    },
+    [isOwner],
+  );
+
+  const handleReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (!isOwner) return;
+      const { source: newParentId, target: nodeId } = newConnection;
+      if (!newParentId || !nodeId) return;
+      if (newParentId === nodeId) {
+        toast.error("A quest can't branch from itself");
+        return;
+      }
+      if (isDescendant(nodes, nodeId, newParentId)) {
+        toast.error("Can't connect a quest to one of its own descendants");
+        return;
+      }
+
+      const previous = nodes.find((n) => n.id === nodeId);
+      setNodes((prev) =>
+        prev.map((n) => (n.id === nodeId ? { ...n, parent_id: newParentId } : n)),
+      );
+
+      const supabase = createClient();
+      supabase
+        .from("nodes")
+        .update({ parent_id: newParentId })
+        .eq("id", nodeId)
+        .then(({ error }) => {
+          if (error) {
+            toast.error("Could not reconnect quest");
+            if (previous) setNodes((prev) => prev.map((n) => (n.id === nodeId ? previous : n)));
+            return;
+          }
+          toast.success("Quest reconnected");
+        });
+    },
+    [isOwner, nodes],
+  );
+
   const structuralKey = useMemo(
     () => nodes.map((n) => `${n.id}:${n.parent_id ?? "root"}`).join("|"),
     [nodes],
   );
 
-  const positions = useMemo(() => {
+  const dagrePositions = useMemo(() => {
     const baseNodes = nodes.map((n) => ({
       id: n.id,
       position: { x: 0, y: 0 },
@@ -204,6 +345,16 @@ export function MapView({
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [structuralKey]);
+
+  const positions = useMemo(() => {
+    const map = new Map(dagrePositions);
+    for (const n of nodes) {
+      if (n.pos_x != null && n.pos_y != null) {
+        map.set(n.id, { x: n.pos_x, y: n.pos_y });
+      }
+    }
+    return map;
+  }, [dagrePositions, nodes]);
 
   const flowNodes: QuestFlowNode[] = useMemo(
     () =>
@@ -221,7 +372,6 @@ export function MapView({
           onSelect: () => setSelectedId(n.id),
           onFire: () => handleFire(n.id),
         },
-        draggable: false,
       })),
     [nodes, positions, fireCounts, firedByMe, selectedId, handleFire],
   );
@@ -252,11 +402,20 @@ export function MapView({
 
   return (
     <div className="relative h-screen w-full bg-background">
-      <div className="pointer-events-none absolute left-6 top-6 z-10">
-        <p className="text-sm font-medium tracking-wide text-foreground">{map.title}</p>
-        <p className="mt-0.5 font-mono text-xs tracking-[0.25em] text-muted-foreground">
-          {map.code}
-        </p>
+      <div className="absolute left-6 top-6 z-10 flex items-center gap-3">
+        <Link
+          href="/"
+          aria-label="Back to Quest Map home"
+          className="flex size-9 items-center justify-center rounded-full border border-white/10 bg-card/80 text-muted-foreground backdrop-blur transition-colors hover:border-white/25 hover:text-foreground"
+        >
+          <Home className="size-4" />
+        </Link>
+        <div className="pointer-events-none">
+          <p className="text-sm font-medium tracking-wide text-foreground">{map.title}</p>
+          <p className="mt-0.5 font-mono text-xs tracking-[0.25em] text-muted-foreground">
+            {map.code}
+          </p>
+        </div>
       </div>
 
       <ReactFlowProvider>
@@ -266,6 +425,10 @@ export function MapView({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           onPaneClick={() => setSelectedId(null)}
+          nodesDraggable={isOwner}
+          edgesReconnectable={isOwner}
+          onNodeDragStop={handleNodeDragStop}
+          onReconnect={handleReconnect}
           fitView
           fitViewOptions={{ padding: 0.4 }}
           minZoom={0.2}
@@ -285,8 +448,13 @@ export function MapView({
         fireCount={selectedNode ? fireCounts[selectedNode.id] ?? 0 : 0}
         isFiredByMe={selectedNode ? firedByMe.has(selectedNode.id) : false}
         isOwner={isOwner}
+        descendantCount={selectedNode ? countDescendants(nodes, selectedNode.id) : 0}
         onFire={() => selectedNode && handleFire(selectedNode.id)}
         onToggleComplete={(value) => selectedNode && handleToggleComplete(selectedNode.id, value)}
+        onEdit={(title, description) =>
+          selectedNode && handleEditNode(selectedNode.id, title, description)
+        }
+        onDelete={() => selectedNode && handleDeleteNode(selectedNode.id)}
         onClose={() => setSelectedId(null)}
       />
 
