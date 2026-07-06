@@ -290,7 +290,7 @@ export function MapView({
         onClose={() => setSelectedId(null)}
       />
 
-      <SuggestDialog mapId={map.id} nodes={nodes} />
+      <SuggestDialog mapId={map.id} nodes={nodes} isOwner={isOwner} />
     </div>
   );
 }

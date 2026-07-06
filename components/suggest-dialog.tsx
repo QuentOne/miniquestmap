@@ -25,7 +25,15 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import type { NodeRow } from "@/lib/types";
 
-export function SuggestDialog({ mapId, nodes }: { mapId: string; nodes: NodeRow[] }) {
+export function SuggestDialog({
+  mapId,
+  nodes,
+  isOwner = false,
+}: {
+  mapId: string;
+  nodes: NodeRow[];
+  isOwner?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -40,20 +48,29 @@ export function SuggestDialog({ mapId, nodes }: { mapId: string; nodes: NodeRow[
     setLoading(true);
 
     const supabase = createClient();
-    const { error } = await supabase.from("suggestions").insert({
-      map_id: mapId,
-      parent_node_id: parentId || null,
-      title: title.trim(),
-      description: description.trim(),
-    });
+    const { error } = isOwner
+      ? await supabase.from("nodes").insert({
+          map_id: mapId,
+          parent_id: parentId || null,
+          title: title.trim(),
+          description: description.trim(),
+        })
+      : await supabase.from("suggestions").insert({
+          map_id: mapId,
+          parent_node_id: parentId || null,
+          title: title.trim(),
+          description: description.trim(),
+        });
 
     setLoading(false);
     if (error) {
-      toast.error("Could not send suggestion: " + error.message);
+      toast.error(
+        `Could not ${isOwner ? "add quest" : "send suggestion"}: ${error.message}`,
+      );
       return;
     }
 
-    toast.success("Suggestion sent!");
+    toast.success(isOwner ? "Quest added!" : "Suggestion sent!");
     setTitle("");
     setDescription("");
     setOpen(false);
@@ -67,17 +84,18 @@ export function SuggestDialog({ mapId, nodes }: { mapId: string; nodes: NodeRow[
         whileTap={{ scale: 0.9 }}
         whileHover={{ scale: 1.06 }}
         className="fixed bottom-6 right-6 z-30 flex size-14 items-center justify-center rounded-full bg-white text-black shadow-[0_0_30px_-4px_rgba(255,255,255,0.5)]"
-        aria-label="Suggest a challenge"
+        aria-label={isOwner ? "Add a quest" : "Suggest a challenge"}
       >
         <Plus className="size-6" />
       </motion.button>
 
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Suggest a challenge</DialogTitle>
+          <DialogTitle>{isOwner ? "Add a quest" : "Suggest a challenge"}</DialogTitle>
           <DialogDescription>
-            Propose a new quest node. The map owner will review it before it
-            appears.
+            {isOwner
+              ? "Add a new node directly to your map — it appears instantly, no review needed."
+              : "Propose a new quest node. The map owner will review it before it appears."}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -117,7 +135,13 @@ export function SuggestDialog({ mapId, nodes }: { mapId: string; nodes: NodeRow[
             </Select>
           </div>
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Sending…" : "Send suggestion"}
+            {loading
+              ? isOwner
+                ? "Adding…"
+                : "Sending…"
+              : isOwner
+                ? "Add quest"
+                : "Send suggestion"}
           </Button>
         </form>
       </DialogContent>
